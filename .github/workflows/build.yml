@@ -1,0 +1,49 @@
+name: Build binary and attach binary to release
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - platform: ubuntu-latest
+            artifact_name: twt
+            asset_name: twt-linux-amd64
+          - platform: windows-latest
+            artifact_name: twt.exe
+            asset_name: twt-windows-amd64.exe
+          - platform: macos-latest
+            artifact_name: twt
+            asset_name: twt-macos-amd64
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Cargo build
+        run: cargo build --release --locked
+
+      - name: Get release name
+        if: github.event_name == 'release'
+        env:
+          BRANCH: ${{ github.ref_name }}
+        id: release_name
+        run: echo "::set-output name=fragment::${BRANCH##*/}"
+
+      - name: Attach binary to release
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ steps.release_name.outputs.fragment }} target/release/${{ matrix.artifact_name }}
+
+      - name: Archive built binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.asset_name }}
+          path: target/release/${{ matrix.artifact_name }}
